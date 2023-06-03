@@ -64,19 +64,13 @@ def p2pk(pk):
     https://github.com/bitpay/bitcore-lib/blob/master/docs/publickey.md#compressed-vs-uncompressed
     pk is compressed, includes X value and parity
     """
-    assert len(pk) == 33 or len(pk) == 65
+    assert len(pk) in {33, 65}
     return CScript([len(pk),
                     pk,
                     s.OP_CHECKSIG])
 
 
 def decompress(nsize, data):
-    # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/script/script.h#L32
-    MAX_SCRIPT_SIZE = 10000
-
-    # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/compressor.h#L31-L37
-    nSpecialScripts = 6
-
     # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/compressor.cpp#L88
     if nsize == 0x00:
         return 'p2pkh', p2pkh(data)
@@ -89,8 +83,14 @@ def decompress(nsize, data):
         pkc = bytearray([nsize]) + data
         return 'p2pk', p2pk(pk_scriptdecompress(bytes(pkc)))
     else:
+        # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/compressor.h#L31-L37
+        nSpecialScripts = 6
+
         # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/compressor.h#L80
         size = nsize - nSpecialScripts
+        # https://github.com/bitcoin/bitcoin/blob/5961b23898ee7c0af2626c46d5d70e80136578d3/src/script/script.h#L32
+        MAX_SCRIPT_SIZE = 10000
+
         if size > MAX_SCRIPT_SIZE:
             return 'oversize', CScript([s.OP_RETURN])
 
@@ -99,10 +99,7 @@ def decompress(nsize, data):
 
 def script_repr(cscript):
     def _repr(o):
-        if isinstance(o, bytes):
-            return "<{}>".format(b2x(o))
-        else:
-            return repr(o)
+        return "<{}>".format(b2x(o)) if isinstance(o, bytes) else repr(o)
 
     ops = []
     i = iter(cscript)
@@ -111,10 +108,10 @@ def script_repr(cscript):
         try:
             op = _repr(next(i))
         except CScriptTruncatedPushDataError as err:
-            op = '%s...<ERROR: %s>' % (_repr(err.data), err)
+            op = f'{_repr(err.data)}...<ERROR: {err}>'
             break
         except CScriptInvalidError as err:
-            op = '<ERROR: %s>' % err
+            op = f'<ERROR: {err}>'
             break
         except StopIteration:
             break
